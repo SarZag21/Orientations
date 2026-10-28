@@ -1,7 +1,8 @@
+
 <script>
     import { onMount } from 'svelte';
 
-    let dice = $state(1);
+    let dice = $state('-');
     let status = $state('Press Start');
     let started = $state(false);
 
@@ -9,15 +10,15 @@
     let rolling = false;
     let timer;
 
-    // Start sensors
+    // Start the phone sensors
     async function start() {
         if (!window.isSecureContext) {
             status = 'HTTPS required';
             return;
         }
 
-        if (!window.DeviceMotionEvent || !window.DeviceOrientationEvent) {
-            status = 'Sensors not supported';
+        if (!window.DeviceMotionEvent) {
+            status = 'Device Motion not supported';
             return;
         }
 
@@ -25,21 +26,13 @@
             // Ask permission on iPhones
             if (typeof DeviceMotionEvent.requestPermission === 'function') {
                 const permission = await DeviceMotionEvent.requestPermission();
+
                 if (permission !== 'granted') {
                     status = 'Permission denied';
                     return;
                 }
             }
 
-            if (typeof DeviceOrientationEvent.requestPermission === 'function') {
-                const permission = await DeviceOrientationEvent.requestPermission();
-                if (permission !== 'granted') {
-                    status = 'Permission denied';
-                    return;
-                }
-            }
-
-            window.removeEventListener('devicemotion', motion);
             window.addEventListener('devicemotion', motion);
 
             started = true;
@@ -49,7 +42,7 @@
         }
     }
 
-    // Detect shaking and read gravity
+    // Detect shaking and read phone position
     function motion(event) {
         const g = event.accelerationIncludingGravity;
 
@@ -58,18 +51,21 @@
         }
 
         const a = event.acceleration;
-        if (!a || a.x === null || a.y === null || a.z === null) return;
+
+        if (!a || a.x === null || a.y === null || a.z === null) {
+            return;
+        }
 
         const force = Math.sqrt(
             a.x ** 2 + a.y ** 2 + a.z ** 2
         );
 
-        // Shake detected
+        // Detect a shake
         if (force > 15 && !rolling) {
             rolling = true;
             status = 'Rolling...';
 
-            // Wait until phone stops moving
+            // Wait one second before showing the result
             timer = setTimeout(() => {
                 calculateDice();
                 rolling = false;
@@ -78,30 +74,32 @@
         }
     }
 
-    // Calculate the number from phone position
+    // Fixed numbers based on phone position
     function calculateDice() {
         const { x, y, z } = gravity;
 
         if (x === null || y === null || z === null) {
-            status = 'No gravity data';
+            status = 'No sensor data';
             return;
         }
 
-        // Screen up or down
+        // Screen up = 1, screen down = 6
         if (Math.abs(z) >= Math.abs(x) && Math.abs(z) >= Math.abs(y)) {
-            dice = z >= 0 ? 1 : 6;
+            dice = z > 0 ? 1 : 6;
         }
-        // Right or left
+
+        // Right edge up = 3, left edge up = 4
         else if (Math.abs(x) >= Math.abs(y)) {
-            dice = x >= 0 ? 3 : 4;
+            dice = x > 0 ? 4 : 3;
         }
-        // Top or bottom
+
+        // Top edge up = 2, bottom edge up = 5
         else {
-            dice = y >= 0 ? 2 : 5;
+            dice = y > 0 ? 2 : 5;
         }
     }
 
-    // Clean up sensors
+    // Remove sensor listener when leaving the page
     onMount(() => {
         return () => {
             clearTimeout(timer);
@@ -115,7 +113,7 @@
 <h1 style="font-size: 100px;">{dice}</h1>
 
 <button onclick={start} disabled={started}>
-    {started ? 'Sensors started' : 'Start'}
+    {started ? 'Started' : 'Start'}
 </button>
 
 <p>{status}</p>
